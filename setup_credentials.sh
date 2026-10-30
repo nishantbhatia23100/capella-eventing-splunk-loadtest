@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Interactive: prompts for the Capella API key, database password and a NEW Splunk admin password,
-# and writes them to ~/.eventing-test-env (chmod 600). Secrets are typed hidden and never echoed or logged.
+# and writes them to ~/.loadtest-env (chmod 600). Secrets are typed hidden and never echoed or logged.
 #   ./setup_credentials.sh        press Enter at any prompt to keep the value already in the file
 set -euo pipefail
 F="${ENV_FILE:-$HOME/.loadtest-env}"
