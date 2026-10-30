@@ -33,6 +33,11 @@ changed one thing per run.
 | 8 | **Relay (OTel Collector), local** | A buffering HEC relay in front of Splunk | Config validated with the real image (two bugs fixed). Loopback demo: 1 worker 16 → 654 calls/s; 16 workers 1,386 events/s with 0 failures vs 12,249 rejected posting directly |
 | 9 | **Final matrix on a non-throttling tunnel** (cloudflared) | Redo 5 properly | See below. 0 failed calls in every run |
 | 10 | **Runtime log level (variant G)**: config document read per execution; level flipped debug → warning → debug during one run, 100 orders/s for 90 s | Can they choose what is logged without redeploying? | Yes. Delivered rate fell from ~200 to **8 events/s** while the config said `warning` (about 20 s after the flip, once the earlier backlog drained) and recovered after setting `debug`. Total events 18,463 against ~18,400 predicted; 0 failed calls |
+| 11 | **Real Splunk, direct** (shipper F, 2 workers, 6,000 orders at 100/s, via tunnel) | The mock hides Splunk's own behaviour | 18,442 new events indexed (expected ~18,420); every call accepted; 0 failure records; all indexed ~47 s after the load ended |
+| 12 | **Real Splunk via the relay** (Collector → Splunk HEC) | Does the relay work with real HEC and keep the index? | 18,394 new events indexed; relay counters 18,395 in / 18,395 out / 0 failed / queue empty; events kept their `couchbase` index |
+| 13 | **Runtime log level on real Splunk** (variant G, debug → warning → debug) | Same as 10, counted by Splunk | 18,472 new events against ~18,400 predicted; 0 failures |
+
+Setup problems met with the real Splunk (an old demo container), and how they showed up, are listed in the README.
 
 ## Final matrix (200 orders/s, 60 s, ~36.8K events each)
 

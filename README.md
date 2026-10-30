@@ -85,6 +85,30 @@ Document `loglevel::<function>` overrides `loglevel::default`; a missing documen
 Filtering where the log is created is the main saving: it avoids the KV write, the DCP event, the dispatch and the
 HTTP call. See RESULTS.md (test 10).
 
+## Testing against a real Splunk
+
+The mock removes Splunk's own limits, so the kit can also run against a real Splunk (a local Docker Splunk is enough):
+
+```bash
+export SPLUNK_AUTH=user:password SPLUNK_MGMT=https://localhost:8089 HEC_TOKEN=<hec token>
+# tunnels/urls.env: HEC_SPLUNK=https://<tunnel>/services/collector/event   (tunnel origin = your HEC port)
+bash splunk_direct_test.sh        # shipper -> tunnel -> Splunk HEC
+bash splunk_relay_test.sh         # shipper -> tunnel -> OTel Collector relay -> Splunk HEC
+bash splunk_level_flip_test.sh    # variant G: change the level mid-run, count what Splunk indexed
+```
+
+Events are counted from Splunk's REST API (`/services/data/indexes/<index>` `totalEventCount`), which needs no search
+license. Things that cost time when setting this up:
+
+- **Expired trial license:** an old Splunk container refuses all data searches ("license expired") while still indexing.
+  Counting via REST (above) still works; renew or use a fresh instance for searches.
+- **Low Docker disk:** Splunk stops searching/indexing below `minFreeSpace` (default 5000 MB). Free disk, or lower it
+  for a throwaway test and restore it afterwards.
+- **HEC scheme:** check whether HEC is HTTP or HTTPS after a container restart (`enableSSL`); a tunnel with the wrong
+  origin scheme returns 502 for every call. For HTTPS with a self-signed certificate use `cloudflared --no-tls-verify`.
+- **Splunk indexes slower than it accepts** (especially under amd64 emulation on Apple Silicon): HEC says 200 well
+  before the event is countable. Judge delivery by the index count after it settles.
+
 ## Safety
 
 - Use a throwaway cluster; scripts create buckets and functions and insert tens of thousands of documents.

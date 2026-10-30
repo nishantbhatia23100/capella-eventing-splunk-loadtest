@@ -9,3 +9,6 @@ dump.txt
 run_*.csv
 __pycache__/
 !results/run_*.csv
+.splunk_token
+.ship_tmp.js
+splunk_rate_*.csv

@@ -16,6 +16,11 @@ case $V in
   *) echo "unknown variant"; exit 2;;
 esac
 W=${WORKERS_OVERRIDE:-$W}
+if [ -n "${HEC_TOKEN:-}" ]; then sed "s/<hec-token>/$HEC_TOKEN/" "$SHIP" > .ship_tmp.js; SHIP=.ship_tmp.js; fi
+splunk_count() {   # total events in the index via REST (works without a search license)
+  curl -sk --max-time 30 -u "${SPLUNK_AUTH:?set SPLUNK_AUTH=user:password}" "${SPLUNK_MGMT:-https://localhost:8089}/services/data/indexes/${SPLUNK_INDEX:-couchbase}?output_mode=json" \
+    | python3 -c "import sys,json;print(json.load(sys.stdin)['entry'][0]['content']['totalEventCount'])" 2>/dev/null || echo 0
+}
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
 say "variant $V (tag $TAG, mock max-conns $MAXCONNS): biz=$BIZ ship=$SHIP shipper workers=$W"
@@ -29,14 +34,23 @@ for spec in "biz_template.json enrich_orders $BIZ" "ship_template.json ship_logs
   if echo "$out" | grep -q "update HTTP 204"; then say "updated $2"; else say "UPDATE FAILED for $2, aborting"; echo "$out"; exit 5; fi
 done
 
-pkill -f "mock_hec.py" ; sleep 1
-nohup python3 mock_hec.py --port $MOCKPORT --latency-ms ${LATENCY:-50} --max-conns $MAXCONNS $MOCKARGS --csv run_$TAG.csv > mock_$TAG.log 2>&1 &
-sleep 2; curl -s --max-time 5 http://127.0.0.1:$MOCKPORT/stats >/dev/null && say "mock up" || { say "mock NOT up"; exit 3; }
+if [ -z "${REAL_SPLUNK:-}" ]; then
+  pkill -f "mock_hec.py" ; sleep 1
+  nohup python3 mock_hec.py --port $MOCKPORT --latency-ms ${LATENCY:-50} --max-conns $MAXCONNS $MOCKARGS --csv run_$TAG.csv > mock_$TAG.log 2>&1 &
+  sleep 2; curl -s --max-time 5 http://127.0.0.1:$MOCKPORT/stats >/dev/null && say "mock up" || { say "mock NOT up"; exit 3; }
+else
+  say "real Splunk mode: events counted via Splunk REST (index=${SPLUNK_INDEX:-couchbase})"
+fi
 
 python3 setup_capella.py --deploy ship_logs | tail -2
 python3 setup_capella.py --deploy enrich_orders | tail -2
 say "waiting 60s for deployment to bootstrap"; sleep 60
 
+if [ -n "${REAL_SPLUNK:-}" ]; then
+  BASE=$(splunk_count); say "splunk baseline events=$BASE"
+  ( : > splunk_rate_$TAG.csv; while true; do echo "$(date +%s),$(splunk_count)" >> splunk_rate_$TAG.csv; sleep 5; done ) &
+  POLLER=$!
+fi
 say "load: ${RATE}/s for ${DUR}s"
 python3 load_gen.py --via-query --ca-cert "$CA" --rate $RATE --duration $DUR --workers 8 > load_$TAG.log 2>&1
 tail -3 load_$TAG.log
@@ -44,17 +58,23 @@ if ! grep -q "errors=0 achieved" load_$TAG.log; then say "LOAD FAILED, aborting"
 
 say "waiting for drain (idle = no new events for 45s)"
 last=-1; idle=0; waited=0
+BASE=${BASE:-0}
 while [ $waited -lt 2700 ]; do
   sleep 10; waited=$((waited+10))
-  cur=$(curl -s --max-time 5 http://127.0.0.1:$MOCKPORT/stats | python3 -c "import sys,json;print(json.load(sys.stdin)['events'])" 2>/dev/null || echo -1)
-  if [ "$cur" = "$last" ] && [ "$cur" != "0" ] && [ "$cur" != "-1" ]; then idle=$((idle+10)); else idle=0; fi
+  if [ -n "${REAL_SPLUNK:-}" ]; then
+    cur=$(splunk_count)
+  else
+    cur=$(curl -s --max-time 5 http://127.0.0.1:$MOCKPORT/stats | python3 -c "import sys,json;print(json.load(sys.stdin)['events'])" 2>/dev/null || echo -1)
+  fi
+  if [ "$cur" = "$last" ] && [ "$cur" != "$BASE" ] && [ "$cur" != "0" ] && [ "$cur" != "-1" ]; then idle=$((idle+10)); else idle=0; fi
   last=$cur
   [ $((waited % 60)) -eq 0 ] && say "events=$cur"
   [ $idle -ge 45 ] && break
 done
-say "drained: events=$last waited=${waited}s"
+say "drained: events=$((last-BASE)) waited=${waited}s"
 sleep 6
-python3 summarize.py run_$TAG.csv
+[ -z "${REAL_SPLUNK:-}" ] && python3 summarize.py run_$TAG.csv
 python3 setup_capella.py --undeploy enrich_orders | tail -1
 python3 setup_capella.py --undeploy ship_logs | tail -1
+[ -n "${POLLER:-}" ] && kill $POLLER 2>/dev/null
 say "variant $V done"
