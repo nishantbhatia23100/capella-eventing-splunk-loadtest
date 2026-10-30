@@ -1,0 +1,22 @@
+# DECISIVE TEST: same receiver, but events are counted and discarded. Point the shipper here to
+# measure how fast Eventing can post when Splunk is out of the picture.
+# Read the rate from http://<relay>:8888/metrics  (otelcol_receiver_accepted_log_records).
+receivers:
+  splunk_hec:
+    endpoint: 0.0.0.0:8088
+processors:
+  memory_limiter: { check_interval: 1s, limit_percentage: 75, spike_limit_percentage: 20 }
+exporters:
+  nop: {}
+extensions:
+  health_check: { endpoint: 0.0.0.0:13133 }
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  pipelines:
+    logs:
+      receivers: [splunk_hec]
+      processors: [memory_limiter]
+      exporters: [nop]

@@ -1,0 +1,41 @@
+{
+  "name": "ship_logs",
+  "code": "",
+  "eventSource": {
+    "bucket": "eventing-logs",
+    "scope": "eventing",
+    "collection": "logs"
+  },
+  "eventMetadataStorage": {
+    "bucket": "data",
+    "scope": "eventing",
+    "collection": "metadata"
+  },
+  "bindings": {
+    "urls": [
+      {
+        "alias": "splunkHEC",
+        "url": "REPLACE_HEC_URL"
+      }
+    ],
+    "buckets": [
+      {
+        "alias": "errCol",
+        "bucket": "eventing-logs",
+        "scope": "eventing",
+        "collection": "shipper_errors",
+        "permission": "readWrite"
+      }
+    ]
+  },
+  "settings": {
+    "allowSyncDocuments": true,
+    "cursorAware": false,
+    "feedBoundary": "from_now",
+    "languageCompatibility": "7.2.0",
+    "maxTimerContextSize": 1024,
+    "scriptTimeout": 60,
+    "sqlConsistency": "none",
+    "workerCount": 1
+  }
+}

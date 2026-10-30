@@ -1,0 +1,42 @@
+# Relay in front of Splunk HEC.
+#   docker compose up -d relay            # real relay -> Splunk (set SPLUNK_HEC_ENDPOINT / SPLUNK_HEC_TOKEN)
+#   docker compose --profile null up -d relay-null   # decisive test: accept and discard
+# Put a TLS-terminating load balancer in front (2+ relay replicas) for production.
+services:
+  relay-init:                         # the Collector runs as uid 10001; give it write access to the queue volume
+    image: busybox:1.36
+    command: ["sh", "-c", "mkdir -p /var/lib/otelcol/queue && chown -R 10001:10001 /var/lib/otelcol"]
+    volumes:
+      - relay-queue:/var/lib/otelcol/queue
+
+  relay:
+    depends_on:
+      relay-init:
+        condition: service_completed_successfully
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      SPLUNK_HEC_ENDPOINT: ${SPLUNK_HEC_ENDPOINT:?set SPLUNK_HEC_ENDPOINT}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:?set SPLUNK_HEC_TOKEN}
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+      - relay-queue:/var/lib/otelcol/queue
+    ports:
+      - "${RELAY_PORT:-8088}:8088"     # HEC in
+      - "8888:8888"     # collector metrics
+      - "13133:13133"   # health
+    restart: unless-stopped
+
+  relay-null:
+    profiles: ["null"]
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-null.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "8088:8088"
+      - "8888:8888"
+      - "13133:13133"
+
+volumes:
+  relay-queue: {}

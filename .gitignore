@@ -1,0 +1,11 @@
+# local credentials, ids, certs, tunnels, run output
+ids.env
+.loadtest-env
+certs/
+tunnels/
+*.log
+*.jsonl
+dump.txt
+run_*.csv
+__pycache__/
+!results/run_*.csv

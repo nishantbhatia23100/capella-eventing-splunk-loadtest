@@ -1,0 +1,35 @@
+{
+  "name": "enrich_orders",
+  "code": "",
+  "eventSource": {
+    "bucket": "data",
+    "scope": "sales",
+    "collection": "orders"
+  },
+  "eventMetadataStorage": {
+    "bucket": "data",
+    "scope": "eventing",
+    "collection": "metadata"
+  },
+  "bindings": {
+    "buckets": [
+      {
+        "alias": "logCollection",
+        "bucket": "eventing-logs",
+        "scope": "eventing",
+        "collection": "logs",
+        "permission": "readWrite"
+      }
+    ]
+  },
+  "settings": {
+    "allowSyncDocuments": true,
+    "cursorAware": false,
+    "feedBoundary": "from_now",
+    "languageCompatibility": "7.2.0",
+    "maxTimerContextSize": 1024,
+    "scriptTimeout": 60,
+    "sqlConsistency": "none",
+    "workerCount": 1
+  }
+}
