@@ -1,0 +1,6 @@
+# Override for local real-Splunk tests: uses the self-signed-TLS-tolerant Collector config.
+services:
+  relay:
+    volumes:
+      - ./otel-collector-selfsigned-demo.yaml:/etc/otelcol/config.yaml:ro
+      - relay-queue:/var/lib/otelcol/queue

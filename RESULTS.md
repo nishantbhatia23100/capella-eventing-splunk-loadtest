@@ -36,6 +36,7 @@ changed one thing per run.
 | 11 | **Real Splunk, direct** (shipper F, 2 workers, 6,000 orders at 100/s, via tunnel) | The mock hides Splunk's own behaviour | 18,442 new events indexed (expected ~18,420); every call accepted; 0 failure records; all indexed ~47 s after the load ended |
 | 12 | **Real Splunk via the relay** (Collector → Splunk HEC) | Does the relay work with real HEC and keep the index? | 18,394 new events indexed; relay counters 18,395 in / 18,395 out / 0 failed / queue empty; events kept their `couchbase` index |
 | 13 | **Runtime log level on real Splunk** (variant G, debug → warning → debug) | Same as 10, counted by Splunk | 18,472 new events against ~18,400 predicted; 0 failures |
+| 14 | **Re-run on a fresh Splunk Enterprise trial (10.4.1) with search enabled**: S1 direct, S2 via relay, S3 level flip, then Splunk searches | Add what counting alone could not show: per-level counts and indexing delay | Every run: 0 failure records; per-level counts match prediction exactly (section below) |
 
 Setup problems met with the real Splunk (an old demo container), and how they showed up, are listed in the README.
 
@@ -70,9 +71,28 @@ Splunk-side request counts for the same 36.8K events: **~11,986** (direct, X4), 
    between Eventing and Splunk (rate limit, connection limit, load balancer, HEC concurrency), not to Eventing's
    own scaling: exactly what the free ngrok tunnel did to our early runs.
 
+## Real Splunk, verified by search (fresh trial, test 14)
+
+100 orders/s for 60 s (S1, S2) or 90 s (S3), shipper F or variant G, 2 shipper workers, through cloudflared tunnels.
+Counts and delay come from Splunk searches. Delay = `_indextime - _time`, where `_time` is when Eventing created the log line.
+
+| Run | debug | info | warning | error | Total | Delay avg / p95 / max (s) |
+|---|---|---|---|---|---|---|
+| S1 direct | 12,000 | 6,000 | 242 | 182 | 18,424 | 9.0 / 18.7 / 24.2 |
+| S2 via relay | 12,000 | 6,000 | 227 | 187 | 18,414 | 8.4 / 15.2 / 20.0 |
+| S3 level flip | 11,880 | 5,940 | 352 | 263 | 18,435 | 3.6 / 7.6 / 10.6 |
+
+- Counts are exact: 2 debug and 1 info per order = 12,000 / 6,000 for 6,000 orders; warning and error follow their ~3% rates. Nothing was lost or duplicated.
+- Level flip, checked in Splunk per 15 s bucket: with the config set to `warning` (sample 0.1), debug fell from ~3,000 to 160 and then 0 per bucket, info to 80 then 0, while warning and error kept arriving. After it returned to `debug`, full volume resumed within one bucket. No redeploy.
+- At 100 orders/s nothing queued: delay of ~9 s average is the tunnel plus Splunk's indexing, not a backlog. Relay vs direct (8.4 vs 9.0 s) is within run-to-run noise; both ran over the same laptop tunnel, so this does not test the relay's round-trip advantage.
+- S3's lower delay was not investigated. These are single runs, so treat differences of a few seconds as noise.
+- Collector counters in S2: 18,415 accepted, 18,415 sent, 0 failed, queue 0.
+
+Reproduce: `./setup_credentials.sh`, then `splunk-trial/up.sh`, then the `splunk_*_test.sh` scripts. `relay/docker-compose.demo.yml` makes the relay accept Splunk's self-signed certificate (demo only).
+
 ## Not tested / caveats
 
-- Real Splunk, and the customer's network path. The mock removes Splunk's own limits.
+- The customer's own Splunk and network path. Tests 11-14 used one local Splunk Enterprise trial at 100 orders/s; its indexing limits are not theirs.
 - The customer's timer-based batching design.
 - A relay close to Eventing (same region). Round-trip savings are predicted, not measured.
 - A single small cluster; numbers compare designs and are not forecasts for another environment.
