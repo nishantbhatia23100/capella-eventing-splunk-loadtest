@@ -11,6 +11,7 @@ case $V in
   C) BIZ=functions/C_D_enrich_orders_batched.js; SHIP=functions/A_C_ship_per_doc.js; W=1;;
   D) BIZ=functions/C_D_enrich_orders_batched.js; SHIP=functions/D_ship_batched.js;    W=4;;
   F) BIZ=functions/C_D_enrich_orders_batched.js; SHIP=functions/F_ship_batched_dlq.js; W=4;;
+  G) BIZ=functions/G_enrich_orders_configurable.js; SHIP=functions/F_ship_batched_dlq.js; W=2;;
   E) BIZ=functions/E_enrich_orders_filtered.js;  SHIP=functions/D_ship_batched.js;    W=1;;
   *) echo "unknown variant"; exit 2;;
 esac

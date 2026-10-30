@@ -22,7 +22,7 @@ load_gen.py ──insert orders──▶ data.sales.orders ──▶ enrich_orde
 
 | Path | Purpose |
 |---|---|
-| `functions/` | Eventing handlers: per-line logs (A), one doc per execution (C/D), filtered (E), shipper with failure records (F) |
+| `functions/` | Eventing handlers: per-line logs (A), one doc per execution (C/D), filtered (E), shipper with failure records (F), **log level controlled by a config document (G)** |
 | `templates/` | Function create/update payloads for the Capella Management API (v4) |
 | `setup_capella.py` | Create buckets/scopes/collections, create/update/deploy/undeploy functions |
 | `run_variant.sh` | One full cycle: undeploy, update code and workers, start mock, deploy, load, wait for drain, summarise |
@@ -31,6 +31,7 @@ load_gen.py ──insert orders──▶ data.sales.orders ──▶ enrich_orde
 | `mock_hec.py` | Splunk HEC stand-in: service time, connection limit, gzip, lag reporting, CSV |
 | `errs_report.py` | Counts and groups the shipper's failure records |
 | `scrape_metrics.py`, `watch_counts.py`, `fn_status.py`, `cluster_info.py` | Node CPU/Eventing metrics, stage counts, function and cluster info |
+| `flip_config.py`, `test_config_flip.sh` | Change the log level at runtime and prove it (variant G) |
 | `summarize.py` | Compares run CSVs |
 | `relay/` | HEC relay (OTel Collector) config, docker-compose, local demo and harness |
 | `results/` | CSVs of the runs behind RESULTS.md |
@@ -66,6 +67,23 @@ python3 summarize.py run_F.csv
 ```
 
 `bash matrix.sh` runs the full matrix. Keep the mock's `--max-conns` realistic for what you model.
+
+## Choosing which logs are shipped (variant G)
+
+`functions/G_enrich_orders_configurable.js` reads a config document on every execution through a read-only
+bucket binding `cfg` (collection `eventing-logs.eventing.config`), so the level can be changed with one write
+and no redeploy:
+
+```bash
+python3 flip_config.py debug          # everything
+python3 flip_config.py warning        # warnings and errors only
+python3 flip_config.py info 0.1       # info sampled at 10%, plus warning/error
+python3 flip_config.py temp-debug 30  # debug for 30 minutes, then back to the saved level
+```
+
+Document `loglevel::<function>` overrides `loglevel::default`; a missing document means `info` at 10%.
+Filtering where the log is created is the main saving: it avoids the KV write, the DCP event, the dispatch and the
+HTTP call. See RESULTS.md (test 10).
 
 ## Safety
 

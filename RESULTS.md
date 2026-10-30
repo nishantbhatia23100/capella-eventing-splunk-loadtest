@@ -32,6 +32,7 @@ changed one thing per run.
 | 7 | **Node metrics scrape** during a run | CPU or Eventing limit? | CPU peaked at 49%; zero Eventing failures, timeouts or worker restarts |
 | 8 | **Relay (OTel Collector), local** | A buffering HEC relay in front of Splunk | Config validated with the real image (two bugs fixed). Loopback demo: 1 worker 16 → 654 calls/s; 16 workers 1,386 events/s with 0 failures vs 12,249 rejected posting directly |
 | 9 | **Final matrix on a non-throttling tunnel** (cloudflared) | Redo 5 properly | See below. 0 failed calls in every run |
+| 10 | **Runtime log level (variant G)**: config document read per execution; level flipped debug → warning → debug during one run, 100 orders/s for 90 s | Can they choose what is logged without redeploying? | Yes. Delivered rate fell from ~200 to **8 events/s** while the config said `warning` (about 20 s after the flip, once the earlier backlog drained) and recovered after setting `debug`. Total events 18,463 against ~18,400 predicted; 0 failed calls |
 
 ## Final matrix (200 orders/s, 60 s, ~36.8K events each)
 

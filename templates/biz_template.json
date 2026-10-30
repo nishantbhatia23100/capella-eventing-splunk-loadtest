@@ -19,6 +19,13 @@
         "scope": "eventing",
         "collection": "logs",
         "permission": "readWrite"
+      },
+      {
+        "alias": "cfg",
+        "bucket": "eventing-logs",
+        "scope": "eventing",
+        "collection": "config",
+        "permission": "read"
       }
     ]
   },

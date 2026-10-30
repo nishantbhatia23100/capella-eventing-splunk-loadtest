@@ -30,7 +30,7 @@ H = {"Authorization": f"Bearer {os.environ['CAPELLA_API_KEY']}", "Content-Type":
 
 LAYOUT = {  # bucket -> scope -> [collections]
     "data": {"sales": ["orders"], "eventing": ["metadata"]},
-    "eventing-logs": {"eventing": ["logs", "shipper_errors"]},
+    "eventing-logs": {"eventing": ["logs", "shipper_errors", "config"]},
 }
 BUCKET_BODY = {"type": "couchbase", "storageBackend": "couchstore", "memoryAllocationInMb": 200,
                "bucketConflictResolution": "seqno", "durabilityLevel": "none",
