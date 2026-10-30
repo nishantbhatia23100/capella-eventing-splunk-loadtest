@@ -42,6 +42,83 @@ Python 3 with `requests`; Docker (relay only); a Capella cluster with the Eventi
 Management API features used); a public HTTPS tunnel or endpoint that the cluster can reach and that
 **does not rate-limit**. Free ngrok throttled Capella's traffic and invalidated early runs: see RESULTS.md.
 
+## Using this in your own Eventing functions
+
+The functions in `functions/` are written for the test setup (an `orders` collection and made-up tier logic).
+To adopt the fix, keep your own business logic and copy only the logging and shipping pattern.
+Nothing else in the repo (`setup_capella.py`, `run_variant.sh`, `mock_hec.py`, `load_gen.py`, `splunk-trial/`) is needed in production.
+
+### 1. Business function: write one log document per execution
+
+Before (one document, one mutation, one later HEC call per log line):
+
+```javascript
+function OnUpdate(doc, meta) {
+  logIt("info", "processing " + meta.id);
+  // ... your logic ...
+  logIt("error", "something failed");
+}
+function logIt(level, message) {
+  logCollection["log::" + Date.now() + "::" + Math.floor(Math.random() * 1e7)] =
+    { "level": level, "message": message, "t": Date.now() };
+}
+```
+
+After (lines are collected in memory and written once; this is the pattern in `functions/C_D_enrich_orders_batched.js`):
+
+```javascript
+function OnUpdate(doc, meta) {
+  var logs = [];
+  function L(level, message) { logs.push({ t: Date.now(), level: level, message: message, meta_id: meta.id }); }
+  try {
+    L("info", "processing " + meta.id);
+    // ... your logic ...
+  } catch (e) {
+    L("error", "unhandled exception for " + meta.id + ": " + String(e));
+  } finally {
+    if (logs.length) {
+      logCollection["log::" + meta.id + "::" + Date.now() + "::" + Math.floor(Math.random() * 1e7)] =
+        { "function": "my_function", "events": logs };
+    }
+  }
+}
+```
+
+Eventing does not allow global variables (the function fails to compile), so keep every setting inside `OnUpdate`.
+To control which levels are written, use `functions/G_enrich_orders_configurable.js` instead (section below).
+
+### 2. Shipper function: use the batched shipper with failure records
+
+Replace your shipper with `functions/F_ship_batched_dlq.js`. Before deploying it, set:
+
+| What | Value |
+|---|---|
+| Source keyspace | the collection your business function writes logs to |
+| Eventing metadata keyspace | your existing one |
+| URL binding `splunkHEC` | your HEC event URL (or the relay URL), authentication **No Auth** |
+| Bucket binding `errCol` (read and write) | a collection for failures, for example `shipper_errors` |
+| `Authorization: Splunk <hec-token>` in the code | your real token. It is a plain string in the function, so restrict the token in Splunk (one index, no admin rights) |
+| Workers | start with 2 to 4; more only helps if the path to Splunk is not the limit |
+| Feed boundary | "From now" for a new deployment |
+
+If you rename a binding or collection, change the matching name in the code.
+
+### 3. Binding and keyspace checklist
+
+| Function | Binding alias | Points to | Access |
+|---|---|---|---|
+| Business | `logCollection` | your log collection | read and write |
+| Business (variant G only) | `cfg` | a config collection | read |
+| Shipper | `splunkHEC` | HEC URL | No Auth |
+| Shipper | `errCol` | a failure collection | read and write |
+
+### 4. Check that it works
+
+1. Run a small batch of real traffic and compare the number of documents in the log collection with the number of source documents: it should now be about one per execution.
+2. Count events in Splunk for the same period, for example `index=couchbase | stats count by level`.
+3. Count the documents in the failure collection. Any entry means HEC returned a non-200 status or the call failed; Eventing's own statistics do not show this.
+4. If throughput stays flat as you add workers, the limit is between Eventing and Splunk; see [RESULTS.md](RESULTS.md) and `relay/`.
+
 ## Configuration (nothing secret is stored in the repo)
 
 Create a private file, e.g. `~/.loadtest-env` (mode 600), and `ids.env`:
