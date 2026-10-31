@@ -18,8 +18,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 args = None
 lock = threading.Lock()
 active = 0
+down = False   # outage switch: GET /ctl?down=1 makes every POST return 503, /ctl?down=0 restores service
 cum = {"reqs": 0, "events": 0, "busy": 0, "bad": 0, "peak_active": 0}
-win = {"reqs": 0, "events": 0, "busy": 0, "bad": 0, "lags": [], "e2e": []}
+win = {"reqs": 0, "events": 0, "busy": 0, "bad": 0, "lags": [], "e2e": [], "dbg": [], "hi": []}
 start_ts = time.time()
 
 
@@ -79,6 +80,10 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(b)
 
     def do_GET(self):
+        global down
+        if self.path.startswith("/ctl"):
+            down = "down=1" in self.path
+            return self._send(200, {"down": down})
         if self.path.startswith("/stats"):
             with lock:
                 self._send(200, dict(cum, active=active, uptime_s=round(time.time() - start_ts, 1)))
@@ -97,6 +102,10 @@ class H(BaseHTTPRequestHandler):
             with open("dump.txt", "a") as f:
                 f.write(f"--- headers: ct={self.headers.get('Content-Type')} enc={self.headers.get('Content-Encoding')} len={len(raw)}\n{raw[:1500]!r}\n")
             cum["dumped"] = cum.get("dumped", 0) + 1
+        if down:
+            with lock:
+                cum["down_rejects"] = cum.get("down_rejects", 0) + 1
+            return self._send(503, {"text": "Server is busy", "code": 9})
         with lock:
             if active >= args.max_conns:
                 cum["busy"] += 1; win["busy"] += 1
@@ -116,11 +125,22 @@ class H(BaseHTTPRequestHandler):
             now = time.time()
             lags = [now - t for e in evs for t in origin_times(e)]
             e2e = [now - t for t in (order_time(e) for e in evs) if t]
+            lv = {"debug": [], "hi": []}   # "hi" = info, warning, error
+            for e in evs:
+                ev = e.get("event") if isinstance(e, dict) else None
+                k = "debug" if isinstance(ev, dict) and ev.get("level") == "debug" else "hi"
+                lv[k] += [now - t for t in origin_times(e)]
+            for e in evs:
+                ev = e.get("event") if isinstance(e, dict) else None
+                name = ev.get("level", "?") if isinstance(ev, dict) else "?"
+                bl = cum.setdefault("by_level", {})
+                bl[name] = bl.get(name, 0) + 1
             with lock:
                 cum["reqs"] += 1; win["reqs"] += 1
                 cum["events"] += len(evs); win["events"] += len(evs)
                 win["lags"] += lags
                 win["e2e"] += e2e
+                win["dbg"] += lv["debug"]; win["hi"] += lv["hi"]
             self._send(200, {"text": "Success", "code": 0})
         finally:
             with lock:
@@ -136,7 +156,7 @@ def reporter():
     if args.csv:
         f = open(args.csv, "w", newline="")
         w = csv.writer(f)
-        w.writerow(["elapsed_s", "reqs_s", "events_s", "busy_s", "bad_s", "lag_p50", "lag_p95", "lag_max", "total_events", "e2e_p50", "e2e_p95"])
+        w.writerow(["elapsed_s", "reqs_s", "events_s", "busy_s", "bad_s", "lag_p50", "lag_p95", "lag_max", "total_events", "e2e_p50", "e2e_p95", "lag_dbg_p95", "lag_dbg_max", "lag_hi_p95", "lag_hi_max"])
     print(f"{'t(s)':>6} {'req/s':>7} {'evt/s':>8} {'busy/s':>7} {'lag p50':>8} {'p95':>8} {'max':>8} {'total':>9} {'e2e p50':>9} {'e2e p95':>9}", flush=True)
     last = time.time()
     while True:
@@ -146,11 +166,13 @@ def reporter():
         last = now
         with lock:
             r, e, b, bad, lags, e2e = win["reqs"], win["events"], win["busy"], win["bad"], sorted(win["lags"]), sorted(win["e2e"])
-            win.update(reqs=0, events=0, busy=0, bad=0, lags=[], e2e=[])
+            dbg, hi = sorted(win["dbg"]), sorted(win["hi"])
+            win.update(reqs=0, events=0, busy=0, bad=0, lags=[], e2e=[], dbg=[], hi=[])
             total = cum["events"]
         row = [round(now - start_ts), round(r / dt, 1), round(e / dt, 1), round(b / dt, 1), round(bad / dt, 1),
                round(pct(lags, .5), 2), round(pct(lags, .95), 2), round(lags[-1], 2) if lags else float("nan"), total,
-               round(pct(e2e, .5), 2), round(pct(e2e, .95), 2)]
+               round(pct(e2e, .5), 2), round(pct(e2e, .95), 2),
+               round(pct(dbg, .95), 2), round(dbg[-1], 2) if dbg else float("nan"), round(pct(hi, .95), 2), round(hi[-1], 2) if hi else float("nan")]
         print(f"{row[0]:>6} {row[1]:>7} {row[2]:>8} {row[3]:>7} {row[5]:>8} {row[6]:>8} {row[7]:>8} {row[8]:>9} {row[9]:>9} {row[10]:>9}", flush=True)
         if w:
             w.writerow(row); f.flush()

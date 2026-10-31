@@ -59,7 +59,9 @@ Splunk-side request counts for the same 36.8K events: **~11,986** (direct, X4), 
 ## What it shows
 
 1. **Workers scale** when nothing downstream limits them (peak lag 315 → 146 → 45 → 4 s for 1, 2, 4, 8 workers).
-   One worker handled ~37 calls/s on this network path: throughput per worker is roughly 1 ÷ round-trip time.
+   One worker handled ~38-40 calls/s on this network path. (Correction: an earlier version of this note said
+   "1 ÷ round-trip time per worker". The full-volume tests below show a worker keeps several calls in flight at once,
+   about 6 by our fit, so measure calls/s per worker on your own path instead of computing it.)
 2. **One doc per execution matters as much as workers.** With the same 8 workers, per-line docs peaked at
    103 s lag against 4 s.
 3. **Call latency matters moderately:** 50 ms instead of 5 ms cost ~25% throughput at 4 workers.
@@ -70,6 +72,86 @@ Splunk-side request counts for the same 36.8K events: **~11,986** (direct, X4), 
 6. **A flat ceiling that doesn't move with worker count** (the customer's 4 vs 8 workers) points to a limit
    between Eventing and Splunk (rate limit, connection limit, load balancer, HEC concurrency), not to Eventing's
    own scaling: exactly what the free ngrok tunnel did to our early runs.
+
+## Full volume: every level kept, nothing filtered
+
+Question: can all logs, debug included, be shipped without cutting anything? Every run below uses the
+one-document-per-order business function with **no filtering** (2 debug + 1 info + ~6% warning/error per order,
+about 3.07 events per order) and shipper F with failure records. "Expected" is what the business function wrote,
+counted in Capella by SQL++; "missing" is expected minus received. Cluster: 3 nodes x 4 vCPU, all services shared.
+Peak lag is the highest 5-second p95 of (received - log created). Splunk is a mock with a set service time, reached
+through a Cloudflare tunnel (the round trip to it is ~150 ms by our fit, so absolute lags are for this path only).
+
+**Scale (fast endpoint, 5 ms):**
+
+| Run | Orders/s | Workers | Events | Missing | Peak lag p95 | Peak events/s | Peak node CPU |
+|---|---|---|---|---|---|---|---|
+| B200w8 | 200 | 8 | 36,847 | 0 | 0.7 s | 630 | 46% |
+| S400w8 | 400 | 8 | 73,685 | 0 | **30 s** (delivered 30 s after load) | 972 | 55% |
+| S400w16 | 400 | 16 | 73,606 | 0 | 0.9 s | 1,260 | 59% |
+| S800w16 | 800 | 16 | 147,388 | 0 | **31 s** | 1,865 | 77% |
+| S800w32 | 800 | 32 | 147,344 | 0 | 1.8 s | 2,698 | 75% |
+| SU10 (10 min) | 200 | 8 | 368,422 | 0 | 1.7 s | 720 | 49% |
+| BU (100, 400, 100) | burst | 16 | 110,551 | 0 | 1.5 s | 1,273 | 58% |
+
+**Slower Splunk, direct (200 orders/s):**
+
+| Run | Splunk stand-in | Workers | Missing | Peak lag p95 |
+|---|---|---|---|---|
+| L100w16 / L100w32 | 100 ms | 16 / 32 | 0 / 0 | 0.9 s / 0.6 s |
+| L200w32 / L200w64 | 200 ms | 32 / 64 | 0 / 0 | 0.9 s / 0.6 s |
+| L400w16 | 400 ms | 16 | 0 | **25 s** (delivered 26 s after load) |
+| L400w32 | 400 ms | 32 | 0 | 2.3 s |
+| L400w64 | 400 ms | 64 | **27** (9 calls got HTTP 429 from the tunnel) | 1.9 s |
+
+**Relay next to Eventing, 400 ms Splunk behind it:**
+
+| Run | Orders/s | Workers | Missing | Peak lag p95 |
+|---|---|---|---|---|
+| R400w8 | 200 | 8 | 0 | 2.4 s |
+| R400w4 | 200 | 4 | 0 | **22.6 s** (4 workers cap at ~170 calls/s on this path) |
+| R800w32 | 800 | 32 | 0 | 2.6 s (147,361 events) |
+
+**Splunk outage of 40 s in the middle of a 120 s run (200 orders/s, 8 workers):**
+
+| Run | Path | Events expected / received | Missing | Failure records | Peak lag p95 |
+|---|---|---|---|---|---|
+| OD | direct | 73,637 / 49,040 | **24,597 (33%)** | 8,022 (HTTP 503) | 1.0 s (the rest were dropped) |
+| OR | via relay | 73,697 / 73,697 | **0** | 0 | 62 s during the outage; caught up 6 s after the load ended |
+
+**Priority isolation (two shipper functions on the same log collection, split by level; 100 orders/s,
+non-debug events go to a fast endpoint, debug events to a 400 ms one):**
+
+| Run | Design | Non-debug lag p95 | Debug lag p95 | Missing |
+|---|---|---|---|---|
+| I0c | one shipper, 8 workers, all levels, 400 ms endpoint | 29 s | 29 s | 0 |
+| I1b | `ship_logs` 8 workers (info, warning, error) + `ship_debug` 4 workers (debug) | **0 s** | 94 s | 0 |
+
+I1b uses 12 workers against I0c's 8, so it is not an equal-worker comparison. An equal-worker pair (6 + 2 against 8) was
+not completed (the laptop went to sleep mid-run).
+
+What it shows:
+
+1. **Keeping every level is feasible.** 800 orders/s (about 2,700 events/s, all levels) held a p95 lag of ~2 s with 32 workers, with nothing
+   missing, on three shared 4 vCPU nodes (node CPU peaked at 77%). Worker count is the lever: 16 workers at 800 orders/s
+   fell 31 s behind and 8 workers at 400 orders/s fell 30 s behind, then both caught up.
+2. **A slower Splunk costs workers.** Per worker we saw ~40 calls/s with a fast endpoint and ~11 calls/s with a 400 ms
+   one. So at 400 ms, 16 workers could not hold 200 orders/s but 32 could.
+3. **A relay next to Eventing makes Splunk's speed irrelevant to the workers.** With a 400 ms Splunk behind it, 8 workers
+   held 200 orders/s and 32 held 800 orders/s, the same as with a fast endpoint. (The relay was reached over the same tunnel, so this
+   shows the effect of the downstream delay, not of a second region.)
+4. **An outage is where "ship everything" is decided.** Direct, a 40 s Splunk outage lost a third of the events (the shipper
+   saw HTTP 503; Eventing's own statistics counted every call as a success). The failure records caught every one, and each record's key names the
+   log document, so those events can be replayed from the logs collection. Through the relay nothing was lost, because the
+   Collector queues on disk and retries.
+5. **Fan-out by level isolates the slow path.** Two shipper functions on the same collection, each shipping only its levels, kept
+   non-debug logs at 0 s lag while the debug path was 94 s behind. It costs one extra function and one more set of workers;
+   the debug path must still be sized, or it lags.
+6. **Tunnel limits are real.** The only losses outside the outage test (27 events in L400w64) were HTTP 429s from the free tunnel at a burst of
+   128+ connections; only the failure records showed them.
+
+Not yet measured: the same full-volume runs against real Splunk (the Docker disk filled up), a relay in a second region, and the
+equal-worker isolation pair.
 
 ## Real Splunk, verified by search (fresh trial, test 14)
 
@@ -102,7 +184,9 @@ Reproduce: `./setup_credentials.sh`, then `splunk-trial/up.sh`, then the `splunk
 
 1. Record every non-200 response and exception from the shipper (dead-letter collection); alert on it.
 2. Write one log document per execution; drop debug, sample info, keep warn/error.
-3. Size workers: workers ≥ calls per second × round-trip time (seconds).
+3. Size workers from a measurement, not a formula: run the shipper against an endpoint that answers 200 instantly,
+   note calls/s per worker, then workers ≥ orders/s ÷ that number. On our path a worker did ~40 calls/s with a fast
+   endpoint and ~11 calls/s with a 400 ms Splunk behind it (see "Full volume" below). Maximum is 64 per function.
 4. Put a batching HEC relay between Eventing and Splunk; run two or more replicas.
 5. Test the shipper against an endpoint that answers 200 instantly. If the ceiling disappears, the limit is in the path to Splunk.
 6. Set a TTL on the logs collection, longer than the worst-case backlog.

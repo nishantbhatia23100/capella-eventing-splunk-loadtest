@@ -98,7 +98,7 @@ Replace your shipper with `functions/F_ship_batched_dlq.js`. Before deploying it
 | URL binding `splunkHEC` | your HEC event URL (or the relay URL), authentication **No Auth** |
 | Bucket binding `errCol` (read and write) | a collection for failures, for example `shipper_errors` |
 | `Authorization: Splunk <hec-token>` in the code | your real token. It is a plain string in the function, so restrict the token in Splunk (one index, no admin rights) |
-| Workers | start with 2 to 4; more only helps if the path to Splunk is not the limit |
+| Workers | size from a measurement: run against an endpoint that answers 200 instantly, note calls/s per worker (about 40 on our path), then workers ≥ orders/s ÷ that. We held 800 orders/s with every level kept using 32 workers. A slower Splunk lowers calls/s per worker, so a relay close to Eventing saves workers (see RESULTS.md) |
 | Feed boundary | "From now" for a new deployment |
 
 If you rename a binding or collection, change the matching name in the code.
