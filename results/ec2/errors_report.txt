@@ -1,0 +1,40 @@
+=== E1: biz=J_customer_enrich_orders.js workers=16 mock=5:8 relay=0
+expected events 34527 (debug 22500, other 12027) | received 33405 | missing 1122 | failure records 0
+  mock :18090 (5 ms): 33405 events | peak lag p95 0s max 0s | lag p95 at load end 0s | delivered +2s after load end | peak 452 events/s | non-debug lag p95 0s, debug lag p95 0s | busy 503s 1122
+  cluster CPU: peak node 62%, peak mean 51% | Eventing DCP backlog peak 1, back to ~0 at t=48s
+mock final stats: 
+failure records: 0
+=== E2: biz=C_D_enrich_orders_batched.js workers=16 mock=5:8 relay=0
+expected events 34533 (debug 22500, other 12033) | received 34533 | missing 0 | failure records 0
+  mock :18090 (5 ms): 34533 events | peak lag p95 0s max 0s | lag p95 at load end 0s | delivered +2s after load end | peak 465 events/s | non-debug lag p95 0s, debug lag p95 0s | busy 503s 0
+  cluster CPU: peak node 41%, peak mean 37% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+mock final stats: 
+failure records: 0
+=== E3: biz=C_D_enrich_orders_batched.js workers=16 mock=5:8 relay=1
+expected events 34488 (debug 22500, other 11988) | received 34488 | missing 0 | failure records 0
+  mock :19092 (5 ms): 34488 events | peak lag p95 1s max 1s | lag p95 at load end 1s | delivered +3s after load end | peak 465 events/s | non-debug lag p95 1s, debug lag p95 1s | busy 503s 0
+  cluster CPU: peak node 43%, peak mean 38% | Eventing DCP backlog peak 1, back to ~0 at t=66s
+  relay: Eventing finished sending -3 s after load end; peak relay queue 0 batches
+mock final stats: 
+failure records: 0
+=== E4: biz=J_customer_enrich_orders.js workers=8 mock=10:64:0.02:15000 relay=0
+expected events 34532 (debug 22500, other 12032) | received 33367 | missing 1165 | failure records 0
+  mock :18090 (10 ms): 33367 events | peak lag p95 277s max 277s | lag p95 at load end 54s | delivered +257s after load end | peak 232 events/s | non-debug lag p95 277s, debug lag p95 277s | busy 503s 0
+  cluster CPU: peak node 52%, peak mean 46% | Eventing DCP backlog peak 1, back to ~0 at t=78s
+mock final stats: 
+failure records: 0
+=== E5: biz=C_D_enrich_orders_batched.js workers=8 mock=10:64:0.02:15000 relay=0
+expected events 34529 (debug 22500, other 12029) | received 33756 | missing 773 | failure records 253
+  mock :18090 (10 ms): 33756 events | peak lag p95 104s max 104s | lag p95 at load end 44s | delivered +92s after load end | peak 452 events/s | non-debug lag p95 104s, debug lag p95 104s | busy 503s 0
+  cluster CPU: peak node 39%, peak mean 36% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+mock final stats: 
+failure records: 253
+{'kind': 'status', 'status': 504, 'body': '<html>\r\n<head><title>504 Gateway Time-out</title></head>\r\n<body><center><h1>504 Gateway Time-out</h1></center></body>\r\n<', 'n': 253, 'first_ts': 1793639552895, 'last_ts': 1793639703135}
+=== E6: biz=J_customer_enrich_orders.js workers=8 mock=10:64:0.02:15000 relay=1
+expected events 34523 (debug 22500, other 12023) | received 34523 | missing 0 | failure records 0
+  mock :19092 (10 ms): 34523 events | peak lag p95 17s max 17s | lag p95 at load end 1s | delivered +7s after load end | peak 557 events/s | non-debug lag p95 17s, debug lag p95 17s | busy 503s 0
+  cluster CPU: peak node 53%, peak mean 47% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+  relay: Eventing finished sending -3 s after load end; peak relay queue 0 batches
+mock final stats: 
+failure records: 0
+ERRORS_DONE

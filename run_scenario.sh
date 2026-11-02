@@ -5,7 +5,7 @@
 #   PROFILE   load stages "rate:seconds,rate:seconds"          (default "200:60")
 #   BIZ       business function file                           (default functions/C_D_enrich_orders_batched.js: ALL levels)
 #   SHIPPERS  one per line: name|file|workers|hec_url|levels   (levels = comma list, empty = all)
-#   MOCKS     space separated port:latency_ms:max_conns        (mock Splunk stand-ins, started here)
+#   MOCKS     space separated port:latency_ms:max_conns[:p504[:gw_ms]]        (mock Splunk stand-ins, started here)
 #   RELAY=1   restart the OTel Collector relay (port 8090) forwarding to mock RELAY_TO (default 19092)
 #   OUTAGE    start_s:duration_s:mock_port  mock answers 503 during that window
 #   METRICS=1 scrape cluster CPU and Eventing backlog during the run
@@ -13,7 +13,8 @@
 set -u
 cd "$(dirname "$0")"
 PROFILE=${PROFILE:-200:60}; BIZ=${BIZ:-functions/C_D_enrich_orders_batched.js}; DRAIN_MAX=${DRAIN_MAX:-900}
-CA="$PWD/certs/nishant-pr-root.pem"; LOAD_WORKERS=${LOAD_WORKERS:-8}; LOAD_BATCH=${LOAD_BATCH:-20}
+CA="$PWD/certs/cluster-root.pem"; LOAD_WORKERS=${LOAD_WORKERS:-8}; LOAD_BATCH=${LOAD_BATCH:-20}
+sedi() { if sed --version >/dev/null 2>&1; then sed -i "$@"; else sed -i "" "$@"; fi; }
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 NAMES=$(echo "$SHIPPERS" | cut -d'|' -f1 | tr '\n' ' ')
 ALLFN="enrich_orders ship_logs ship_debug"
@@ -22,16 +23,17 @@ say "scenario $TAG: profile=$PROFILE biz=$BIZ shippers: $(echo "$SHIPPERS" | tr 
 python3 errs_report.py --clear > /dev/null 2>&1
 for f in $ALLFN; do python3 setup_capella.py --undeploy $f 2>&1 | grep -E "HTTP" | head -1; done
 say "waiting 40s for undeploy"; sleep 40
+[ -n "${CLEAR_LOGS:-}" ] && { say "clearing the log collection"; python3 clear_logs.py 2>&1 | tail -2; }
 
 out=$(python3 setup_capella.py --update-function templates/biz_template.json --name enrich_orders --code $BIZ 2>&1)
 echo "$out" | grep -q "update HTTP 204" && say "updated enrich_orders" || { say "UPDATE FAILED enrich_orders"; echo "$out"; exit 5; }
 echo "$SHIPPERS" | while IFS='|' read -r name file workers url levels; do
   [ -z "$name" ] && continue
   tmp=".ship_$name.js"; cp "$file" "$tmp"
-  [ -n "${HEC_TOKEN:-}" ] && sed -i '' "s/<hec-token>/$HEC_TOKEN/" "$tmp"
+  [ -n "${HEC_TOKEN:-}" ] && sedi "s/<hec-token>/$HEC_TOKEN/" "$tmp"
   if [ -n "$levels" ]; then
     lv=$(echo "$levels" | sed -E 's/([a-z]+)/"\1"/g; s/,/, /g')
-    sed -i '' -E "s/var WANT = \[[^]]*\];/var WANT = [$lv];/" "$tmp"
+    sedi -E "s/var WANT = \[[^]]*\];/var WANT = [$lv];/" "$tmp"
   fi
   out=$(python3 setup_capella.py --update-function templates/ship_template.json --name $name --code $tmp --hec-url "$url" --workers $workers 2>&1)
   if echo "$out" | grep -q "update HTTP 204"; then say "updated $name (workers $workers, levels ${levels:-all})"
@@ -43,16 +45,19 @@ done || exit 5
 
 pkill -f mock_hec.py; sleep 1
 for m in ${MOCKS:-}; do
-  IFS=: read -r port lat conns <<< "$m"
-  nohup python3 mock_hec.py --port $port --latency-ms $lat --jitter-ms 5 --max-conns $conns --report-sec 5 --csv run_${TAG}_p$port.csv > mock_${TAG}_p$port.log 2>&1 &
+  IFS=: read -r port lat conns p504 gwms <<< "$m"
+  nohup python3 mock_hec.py --port $port --latency-ms $lat --jitter-ms 5 --max-conns $conns --p504 ${p504:-0} --gw-ms ${gwms:-30000} --report-sec 5 --csv run_${TAG}_p$port.csv > mock_${TAG}_p$port.log 2>&1 &
 done
 sleep 2
 for m in ${MOCKS:-}; do port=${m%%:*}; curl -s --max-time 5 http://127.0.0.1:$port/stats > /dev/null && say "mock :$port up" || { say "mock :$port NOT up"; exit 3; }; done
+# SPLUNK_COUNT=1: delivered = events indexed in the real Splunk (REST, no search license needed) minus the count at start
+splunk_total() { curl -sk --max-time 20 -u "$SPLUNK_AUTH" "$SPLUNK_MGMT/services/data/indexes/${SPLUNK_INDEX:-couchbase}?output_mode=json" | python3 -c "import sys,json;print(int(json.load(sys.stdin)['entry'][0]['content']['totalEventCount']))" 2>/dev/null || echo 0; }
 MOCK_START=$(date +%s)
+SPLUNK_BASE=0; [ -n "${SPLUNK_COUNT:-}" ] && SPLUNK_BASE=$(splunk_total)
 
 if [ -n "${RELAY:-}" ]; then
   ( cd relay && docker compose down -v > /dev/null 2>&1
-    SPLUNK_HEC_ENDPOINT=http://host.docker.internal:${RELAY_TO:-19092}/services/collector SPLUNK_HEC_TOKEN=dummy RELAY_PORT=8090 \
+    SPLUNK_HEC_ENDPOINT=${RELAY_ENDPOINT:-http://host.docker.internal:${RELAY_TO:-19092}/services/collector} SPLUNK_HEC_TOKEN=${RELAY_REAL_TOKEN:-dummy} RELAY_PORT=8090 \
       docker compose up -d relay > /dev/null 2>&1 )
   sleep 8; curl -s --max-time 5 localhost:13133 > /dev/null && say "relay up" || { say "relay NOT up"; exit 3; }
   ( : > relay_$TAG.csv; while true; do m=$(curl -s --max-time 3 localhost:8888/metrics); \
@@ -72,6 +77,11 @@ if [ -n "${OUTAGE:-}" ]; then   # start_s:duration_s:mock_port : the mock return
   ( sleep $o_s; say "OUTAGE start (mock :$o_p returns 503 for ${o_d}s)"; curl -s "http://127.0.0.1:$o_p/ctl?down=1" > /dev/null
     sleep $o_d; curl -s "http://127.0.0.1:$o_p/ctl?down=0" > /dev/null; say "OUTAGE end" ) &
 fi
+if [ -n "${SPLUNK_OUTAGE:-}" ]; then   # start_s:duration_s : the REAL Splunk's HEC input is switched off (connection refused) for the window
+  IFS=: read -r so_s so_d <<< "$SPLUNK_OUTAGE"; HECU="$SPLUNK_MGMT/servicesNS/nobody/splunk_httpinput/data/inputs/http/http"
+  ( sleep $so_s; say "SPLUNK OUTAGE start (HEC off for ${so_d}s)"; curl -sk -u "$SPLUNK_AUTH" "$HECU" -d disabled=1 > /dev/null
+    sleep $so_d; curl -sk -u "$SPLUNK_AUTH" "$HECU" -d disabled=0 > /dev/null; say "SPLUNK OUTAGE end" ) &
+fi
 for stage in $(echo "$PROFILE" | tr ',' ' '); do
   i=$((i+1)); r=${stage%%:*}; d=${stage##*:}
   say "load stage $i: ${r}/s for ${d}s"
@@ -81,7 +91,7 @@ for stage in $(echo "$PROFILE" | tr ',' ' '); do
 done
 LOAD_END=$(date +%s)
 
-get_events() { local t=0; for m in ${MOCKS:-}; do n=$(curl -s --max-time 5 http://127.0.0.1:${m%%:*}/stats | python3 -c "import sys,json;print(json.load(sys.stdin)['events'])" 2>/dev/null || echo 0); t=$((t+n)); done; echo $t; }
+get_events() { if [ -n "${SPLUNK_COUNT:-}" ]; then echo $(( $(splunk_total) - SPLUNK_BASE )); return; fi; local t=0; for m in ${MOCKS:-}; do n=$(curl -s --max-time 5 http://127.0.0.1:${m%%:*}/stats | python3 -c "import sys,json;print(json.load(sys.stdin)['events'])" 2>/dev/null || echo 0); t=$((t+n)); done; echo $t; }
 say "waiting for delivery (idle = no new events for 45s, max ${DRAIN_MAX}s)"
 last=-1; idle=0; waited=0; timeout=0
 while :; do

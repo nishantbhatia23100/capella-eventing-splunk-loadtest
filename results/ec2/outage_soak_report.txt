@@ -1,0 +1,44 @@
+=== O1 (16 workers, profile 300:600, outage 180:300, direct)
+[18:06:39] SPLUNK OUTAGE start (HEC off for 300s)
+[18:11:39] SPLUNK OUTAGE end
+[18:14:44] delivered so far: 276373 events (waited 60s after load)
+[18:15:15] expected {"docs": 180000, "total": 552757, "debug": 360000, "nondebug": 192757}
+  cluster CPU: peak node 73%, peak mean 66% | Eventing DCP backlog peak 8, back to ~0 at t=594s
+failure records: 90002
+{'kind': 'exception', 'error': 'Error: Unable to perform the request: Could not connect to server', 'n': 90002, 'first_ts': 1793642799188, 'last_ts': 1793643099193}
+
+=== Splunk check for O1 (run O11) ===
+Eventing wrote 552757 events (360000 debug); Splunk has 276373; missing 276384; duplicated 0; orders seen 89998
+  debug     179996   created->searchable avg  -0.5s  p95  -0.0s  max   0.1s
+  error       2745   created->searchable avg  -0.5s  p95  -0.0s  max   0.1s
+  info       89998   created->searchable avg  -0.5s  p95  -0.0s  max   0.1s
+  warning     3634   created->searchable avg  -0.5s  p95  -0.0s  max   0.1s
+=== O2 (16 workers, profile 300:600, outage 180:300, relay)
+[18:23:42] SPLUNK OUTAGE start (HEC off for 300s)
+[18:28:42] SPLUNK OUTAGE end
+[18:31:48] delivered so far: 552694 events (waited 60s after load)
+[18:32:19] expected {"docs": 180000, "total": 552694, "debug": 360000, "nondebug": 192694}
+  cluster CPU: peak node 66%, peak mean 55% | Eventing DCP backlog peak 2, back to ~0 at t=572s
+failure records: 0
+relay: peak queue batches 299 | last sample (ts,accepted,sent,queue): 1793644336,1547408,1547408,0
+
+=== Splunk check for O2 (run O21) ===
+Eventing wrote 552694 events (360000 debug); Splunk has 552694; missing 0; duplicated 0; orders seen 180000
+  debug     360000   created->searchable avg  78.8s  p95 276.2s  max 333.3s
+  error       5485   created->searchable avg  78.8s  p95 276.0s  max 333.3s
+  info      180000   created->searchable avg  78.8s  p95 276.1s  max 333.3s
+  warning     7209   created->searchable avg  79.8s  p95 275.9s  max 333.2s
+=== SK (16 workers, profile 400:1800, outage none, relay)
+[19:07:42] delivered so far: 2210394 events (waited 70s after load)
+[19:09:06] expected {"docs": 720000, "total": 2210394, "debug": 1440000, "nondebug": 770394}
+  cluster CPU: peak node 76%, peak mean 63% | Eventing DCP backlog peak 8, back to ~0 at t=1598s
+failure records: 0
+relay: peak queue batches 1 | last sample (ts,accepted,sent,queue): 1793646546,3757802,3757802,0
+
+=== Splunk check for SK (run SK1) ===
+Eventing wrote 2210394 events (1440000 debug); Splunk has 2210394; missing 0; duplicated 0; orders seen 720000
+  debug    1440000   created->searchable avg  -0.0s  p95   0.6s  max   0.9s
+  error      21560   created->searchable avg  -0.0s  p95   0.6s  max   0.9s
+  info      720000   created->searchable avg  -0.0s  p95   0.6s  max   0.9s
+  warning    28834   created->searchable avg  -0.0s  p95   0.6s  max   0.9s
+OUTAGE_SOAK_DONE

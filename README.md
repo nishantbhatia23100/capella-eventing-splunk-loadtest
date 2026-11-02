@@ -34,13 +34,20 @@ load_gen.py ──insert orders──▶ data.sales.orders ──▶ enrich_orde
 | `flip_config.py`, `test_config_flip.sh` | Change the log level at runtime and prove it (variant G) |
 | `summarize.py` | Compares run CSVs |
 | `relay/` | HEC relay (OTel Collector) config, docker-compose, local demo and harness |
-| `results/` | CSVs of the runs behind RESULTS.md |
+| `ec2_*.sh`, `run_scenario.sh`, `scenario_report.py`, `splunk_verify.py`, `expected_events.py`, `clear_logs.py` | Capella to a real Splunk in one AWS region: customer baseline, latency sweep, error injection, volume push, outage and soak (tests 15-20) |
+| `results/` | CSVs and reports of the runs behind RESULTS.md (`results/ec2/` for tests 15-20) |
 
 ## Requirements
 
 Python 3 with `requests`; Docker (relay only); a Capella cluster with the Eventing service (Enterprise plan for the
 Management API features used); a public HTTPS tunnel or endpoint that the cluster can reach and that
 **does not rate-limit**. Free ngrok throttled Capella's traffic and invalidated early runs: see RESULTS.md.
+
+## Running the AWS tests (tests 15-20)
+
+Two EC2 instances in the same region as the Capella cluster: a load generator (this kit, mocks, relay) and a Splunk Enterprise host.
+Set `LG_IP` and `SPLUNK_IP`, keep credentials in `~/.loadtest-env`, and run for example `bash ec2_latency.sh`, `ec2_errors.sh`,
+`ec2_push.sh` or `ec2_outage_soak.sh` on the load generator. Open only the ports you need, restricted to your IP, and delete the instances afterwards.
 
 ## Using this in your own Eventing functions
 

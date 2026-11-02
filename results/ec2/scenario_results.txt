@@ -1,0 +1,146 @@
+
+=== Jprobe ===
+load: 35 s | delivery wait after load: 60 s
+expected events 0 (debug 0, other 0) | received 4623 | missing -4623 | failure records 0
+  mock :18090 (5 ms): 4623 events | peak lag p95 10s max 10s | lag p95 at load end 7s | delivered +12s after load end | peak 121 events/s | non-debug lag p95 10s, debug lag p95 10s | busy 503s 0
+
+=== J_w1 ===
+load: 451 s | delivery wait after load: 301 s (TIMEOUT: not fully delivered)
+expected events 0 (debug 0, other 0) | received 89939 | missing -89939 | failure records 0
+  mock :18090 (5 ms): 89939 events | peak lag p95 431s max 432s | lag p95 at load end 170s | delivered +332s after load end | peak 121 events/s | non-debug lag p95 431s, debug lag p95 431s | busy 503s 0
+  cluster CPU: peak node 73%, peak mean 65% | Eventing DCP backlog peak 6, back to ~0 at t=153s
+
+=== J_w4 ===
+load: 451 s | delivery wait after load: 180 s
+expected events 187801 (debug 122400, other 65401) | received 187801 | missing 0 | failure records 0
+  mock :18090 (5 ms): 187801 events | peak lag p95 130s max 130s | lag p95 at load end 49s | delivered +132s after load end | peak 485 events/s | non-debug lag p95 130s, debug lag p95 130s | busy 503s 0
+  cluster CPU: peak node 77%, peak mean 68% | Eventing DCP backlog peak 9, back to ~0 at t=383s
+
+=== J_w16 ===
+load: 451 s | delivery wait after load: 60 s
+expected events 187873 (debug 122400, other 65473) | received 187873 | missing 0 | failure records 0
+  mock :18090 (5 ms): 187873 events | peak lag p95 0s max 1s | lag p95 at load end 0s | delivered +2s after load end | peak 1232 events/s | non-debug lag p95 0s, debug lag p95 0s | busy 503s 0
+  cluster CPU: peak node 78%, peak mean 72% | Eventing DCP backlog peak 7, back to ~0 at t=418s
+
+=== NSprobe ===
+load: 20 s | delivery wait after load: 60 s (TIMEOUT: not fully delivered)
+expected events 611 (debug 400, other 211) | received 0 | missing 611 | failure records 200
+
+=== NSprobe ===
+load: 20 s | delivery wait after load: 60 s
+expected events 615 (debug 400, other 215) | received 0 | missing 615 | failure records 0
+
+=== JS_w1 ===
+load: 450 s | delivery wait after load: 71 s
+expected events 187811 (debug 122400, other 65411) | received 0 | missing 187811 | failure records 0
+  cluster CPU: peak node 77%, peak mean 75% | Eventing DCP backlog peak 3, back to ~0 at t=435s
+
+=== L1 ===
+load: 80 s | delivery wait after load: 240 s (TIMEOUT: not fully delivered)
+expected events 34548 (debug 22500, other 12048) | received 13852 | missing 20696 | failure records 0
+  mock :18090 (100 ms): 13852 events | peak lag p95 305s max 305s | lag p95 at load end 67s | delivered +257s after load end | peak 42 events/s | non-debug lag p95 305s, debug lag p95 304s | busy 503s 0
+  cluster CPU: peak node 60%, peak mean 50% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+
+=== L2 ===
+load: 80 s | delivery wait after load: 91 s
+expected events 34540 (debug 22500, other 12040) | received 34540 | missing 0 | failure records 0
+  mock :18090 (100 ms): 34540 events | peak lag p95 37s max 37s | lag p95 at load end 24s | delivered +37s after load end | peak 334 events/s | non-debug lag p95 37s, debug lag p95 37s | busy 503s 0
+  cluster CPU: peak node 58%, peak mean 49% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+
+=== L3 ===
+load: 80 s | delivery wait after load: 60 s
+expected events 34594 (debug 22500, other 12094) | received 34594 | missing 0 | failure records 0
+  mock :19092 (100 ms): 34594 events | peak lag p95 1s max 1s | lag p95 at load end 1s | delivered -1s after load end | peak 466 events/s | non-debug lag p95 1s, debug lag p95 1s | busy 503s 0
+  cluster CPU: peak node 58%, peak mean 48% | Eventing DCP backlog peak 6, back to ~0 at t=42s
+  relay: Eventing finished sending -3 s after load end; peak relay queue 0 batches
+
+=== L4 ===
+load: 80 s | delivery wait after load: 240 s (TIMEOUT: not fully delivered)
+expected events 34559 (debug 22500, other 12059) | received 34559 | missing 0 | failure records 0
+  mock :18090 (100 ms): 34559 events | peak lag p95 198s max 198s | lag p95 at load end 54s | delivered +197s after load end | peak 129 events/s | non-debug lag p95 198s, debug lag p95 198s | busy 503s 0
+  cluster CPU: peak node 46%, peak mean 39% | Eventing DCP backlog peak 1, back to ~0 at t=24s
+
+=== L5 ===
+load: 80 s | delivery wait after load: 61 s
+expected events 34499 (debug 22500, other 11999) | received 34499 | missing 0 | failure records 0
+  mock :19092 (100 ms): 34499 events | peak lag p95 1s max 1s | lag p95 at load end 1s | delivered +3s after load end | peak 467 events/s | non-debug lag p95 1s, debug lag p95 1s | busy 503s 0
+  cluster CPU: peak node 46%, peak mean 40% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+  relay: Eventing finished sending -2 s after load end; peak relay queue 0 batches
+
+=== L6 ===
+load: 80 s | delivery wait after load: 241 s (TIMEOUT: not fully delivered)
+expected events 34532 (debug 22500, other 12032) | received 28331 | missing 6201 | failure records 0
+  mock :18090 (25 ms): 28331 events | peak lag p95 268s max 270s | lag p95 at load end 60s | delivered +252s after load end | peak 87 events/s | non-debug lag p95 269s, debug lag p95 268s | busy 503s 0
+  cluster CPU: peak node 50%, peak mean 47% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+
+=== L7 ===
+load: 80 s | delivery wait after load: 240 s (TIMEOUT: not fully delivered)
+expected events 34579 (debug 22500, other 12079) | received 21168 | missing 13411 | failure records 0
+  mock :18090 (50 ms): 21168 events | peak lag p95 289s max 289s | lag p95 at load end 64s | delivered +257s after load end | peak 64 events/s | non-debug lag p95 288s, debug lag p95 289s | busy 503s 0
+  cluster CPU: peak node 58%, peak mean 47% | Eventing DCP backlog peak 1, back to ~0 at t=42s
+
+=== E1 ===
+load: 81 s | delivery wait after load: 60 s
+expected events 34527 (debug 22500, other 12027) | received 33405 | missing 1122 | failure records 0
+  mock :18090 (5 ms): 33405 events | peak lag p95 0s max 0s | lag p95 at load end 0s | delivered +2s after load end | peak 452 events/s | non-debug lag p95 0s, debug lag p95 0s | busy 503s 1122
+  cluster CPU: peak node 62%, peak mean 51% | Eventing DCP backlog peak 1, back to ~0 at t=48s
+
+=== E2 ===
+load: 80 s | delivery wait after load: 60 s
+expected events 34533 (debug 22500, other 12033) | received 34533 | missing 0 | failure records 0
+  mock :18090 (5 ms): 34533 events | peak lag p95 0s max 0s | lag p95 at load end 0s | delivered +2s after load end | peak 465 events/s | non-debug lag p95 0s, debug lag p95 0s | busy 503s 0
+  cluster CPU: peak node 41%, peak mean 37% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+
+=== E3 ===
+load: 80 s | delivery wait after load: 60 s
+expected events 34488 (debug 22500, other 11988) | received 34488 | missing 0 | failure records 0
+  mock :19092 (5 ms): 34488 events | peak lag p95 1s max 1s | lag p95 at load end 1s | delivered +3s after load end | peak 465 events/s | non-debug lag p95 1s, debug lag p95 1s | busy 503s 0
+  cluster CPU: peak node 43%, peak mean 38% | Eventing DCP backlog peak 1, back to ~0 at t=66s
+  relay: Eventing finished sending -3 s after load end; peak relay queue 0 batches
+
+=== E4 ===
+load: 80 s | delivery wait after load: 241 s (TIMEOUT: not fully delivered)
+expected events 34532 (debug 22500, other 12032) | received 33367 | missing 1165 | failure records 0
+  mock :18090 (10 ms): 33367 events | peak lag p95 277s max 277s | lag p95 at load end 54s | delivered +257s after load end | peak 232 events/s | non-debug lag p95 277s, debug lag p95 277s | busy 503s 0
+  cluster CPU: peak node 52%, peak mean 46% | Eventing DCP backlog peak 1, back to ~0 at t=78s
+
+=== E5 ===
+load: 80 s | delivery wait after load: 140 s
+expected events 34529 (debug 22500, other 12029) | received 33756 | missing 773 | failure records 253
+  mock :18090 (10 ms): 33756 events | peak lag p95 104s max 104s | lag p95 at load end 44s | delivered +92s after load end | peak 452 events/s | non-debug lag p95 104s, debug lag p95 104s | busy 503s 0
+  cluster CPU: peak node 39%, peak mean 36% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+
+=== E6 ===
+load: 80 s | delivery wait after load: 60 s
+expected events 34523 (debug 22500, other 12023) | received 34523 | missing 0 | failure records 0
+  mock :19092 (10 ms): 34523 events | peak lag p95 17s max 17s | lag p95 at load end 1s | delivered +7s after load end | peak 557 events/s | non-debug lag p95 17s, debug lag p95 17s | busy 503s 0
+  cluster CPU: peak node 53%, peak mean 47% | Eventing DCP backlog peak 0, back to ~0 at t=6s
+  relay: Eventing finished sending -3 s after load end; peak relay queue 0 batches
+
+=== P1 ===
+load: 325 s | delivery wait after load: 60 s
+expected events 994649 (debug 648000, other 346649) | received 0 | missing 994649 | failure records 0
+  cluster CPU: peak node 91%, peak mean 89% | Eventing DCP backlog peak 8, back to ~0 at t=326s
+
+=== P2 ===
+load: 326 s | delivery wait after load: 60 s
+expected events 994714 (debug 648000, other 346714) | received 0 | missing 994714 | failure records 0
+  cluster CPU: peak node 93%, peak mean 88% | Eventing DCP backlog peak 7, back to ~0 at t=226s
+  relay: Eventing finished sending -3 s after load end; peak relay queue 1 batches
+
+=== O1 ===
+load: 605 s | delivery wait after load: 60 s
+expected events 552757 (debug 360000, other 192757) | received 0 | missing 552757 | failure records 90002
+  cluster CPU: peak node 73%, peak mean 66% | Eventing DCP backlog peak 8, back to ~0 at t=594s
+
+=== O2 ===
+load: 606 s | delivery wait after load: 60 s
+expected events 552694 (debug 360000, other 192694) | received 0 | missing 552694 | failure records 0
+  cluster CPU: peak node 66%, peak mean 55% | Eventing DCP backlog peak 2, back to ~0 at t=572s
+  relay: Eventing finished sending -3 s after load end; peak relay queue 299 batches
+
+=== SK ===
+load: 1802 s | delivery wait after load: 70 s
+expected events 2210394 (debug 1440000, other 770394) | received 0 | missing 2210394 | failure records 0
+  cluster CPU: peak node 76%, peak mean 63% | Eventing DCP backlog peak 8, back to ~0 at t=1598s
+  relay: Eventing finished sending 4 s after load end; peak relay queue 1 batches

@@ -25,6 +25,8 @@ services:
       - "${RELAY_PORT:-8088}:8088"     # HEC in
       - "8888:8888"     # collector metrics
       - "13133:13133"   # health
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach a destination running on the Docker host (Linux)
     restart: unless-stopped
 
   relay-null:

@@ -11,7 +11,7 @@ Expose it to Capella with:  ngrok http 8088   (use the https URL as the cURL bin
 Lag is taken from, in order: event["@timestamp"] (ISO), event["t"] (epoch ms), or each
 entry of event["events"][*]["t"]. Envelope "time" is NOT used: shippers often set it to ship time.
 """
-import argparse, csv, gzip, json, sys, threading, time
+import random, argparse, csv, gzip, json, sys, threading, time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -106,10 +106,19 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 cum["down_rejects"] = cum.get("down_rejects", 0) + 1
             return self._send(503, {"text": "Server is busy", "code": 9})
+        if args.p504 and random.random() < args.p504:
+            # a gateway/load balancer in front of Splunk giving up on a slow upstream
+            time.sleep(args.gw_ms / 1000.0)
+            with lock:
+                cum["gw504"] = cum.get("gw504", 0) + 1
+            b = b"<html>\r\n<head><title>504 Gateway Time-out</title></head>\r\n<body><center><h1>504 Gateway Time-out</h1></center></body>\r\n</html>"
+            self.send_response(504); self.send_header("Content-Type", "text/html"); self.send_header("Content-Length", str(len(b)))
+            self.end_headers(); self.wfile.write(b)
+            return
         with lock:
             if active >= args.max_conns:
                 cum["busy"] += 1; win["busy"] += 1
-                return self._send(503, {"text": "Server is busy", "code": 9})
+                return self._send(503, {"text": "Server is busy, active connection limit reached", "code": 9})
             active += 1
             cum["peak_active"] = max(cum["peak_active"], active)
         try:
@@ -186,6 +195,8 @@ def main():
     ap.add_argument("--per-event-ms", type=float, default=0.0, help="extra service time per event in a request")
     ap.add_argument("--jitter-ms", type=float, default=10)
     ap.add_argument("--max-conns", type=int, default=8, help="concurrent in-flight requests before 503 'Server is busy'")
+    ap.add_argument("--p504", type=float, default=0.0, help="fraction of requests answered 504 Gateway Time-out after --gw-ms")
+    ap.add_argument("--gw-ms", type=float, default=30000, help="how long a 504 request hangs before the gateway answers")
     ap.add_argument("--token", default="", help="require this HEC token (omit to accept any)")
     ap.add_argument("--report-sec", type=float, default=5)
     ap.add_argument("--csv", default="")

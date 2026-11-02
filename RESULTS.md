@@ -172,13 +172,80 @@ Counts and delay come from Splunk searches. Delay = `_indextime - _time`, where 
 
 Reproduce: `./setup_credentials.sh`, then `splunk-trial/up.sh`, then the `splunk_*_test.sh` scripts. `relay/docker-compose.demo.yml` makes the relay accept Splunk's self-signed certificate (demo only).
 
+## Capella to a real Splunk in the same AWS region (tests 15-20)
+
+Environment: Capella cluster (managed, AWS us-east-1, 3 nodes x 4 vCPU, every service shared on the same nodes), a load
+generator, mock HEC endpoints and the relay on one EC2 instance in us-east-1, and Splunk Enterprise (Docker, 16 vCPU) on a
+second one, HEC over plain HTTP (Capella Eventing rejected a self-signed HTTPS certificate). A production cluster with
+dedicated Eventing nodes has more headroom than this; treat the numbers as a floor. Raw output is in `results/ec2/`;
+scripts are `ec2_*.sh`. "Customer code" = `functions/J_customer_*.js`, the per-line logger and per-call shipper under study.
+
+**15. Why the backlog builds: throughput per worker is set by Splunk's answer time.** Customer code, 1 worker, 150 orders/s for 75 s
+(about 460 events/s offered, debug on):
+
+| Splunk answer time | Events/s shipped by 1 worker | Peak lag (p95) | Result |
+|---|---|---|---|
+| 5 ms | 121 | 431 s on a longer ladder run | falls behind |
+| 25 ms | 87 | 268 s | falls behind |
+| 50 ms | 64 | 289 s | falls behind |
+| 100 ms | 42 | 305 s, 20,696 of 34,548 events still undelivered 4 min after load | falls behind |
+| 100 ms, 8 workers | 334 | 37 s | all delivered |
+| 100 ms, 1 worker, through the relay | 466 | 1 s | all delivered |
+| 100 ms, 1 worker, one log doc per execution, direct | 129 | 198 s | still behind |
+| 100 ms, 1 worker, one log doc per execution, relay | 467 | 1 s | all delivered |
+
+Ladder run, 20 to 400 orders/s over 450 s (187.8k events, 5 ms Splunk): 1 worker 121 events/s and 431 s behind; 4 workers
+485 events/s and 130 s behind; 16 workers 1,232 events/s, 0 to 1 s behind, nothing missing. Reducing documents helps a little;
+removing the per-call wait (relay) is what removes the backlog.
+
+**16. 503 "active connection limit reached" and 504 gateway time-out** (mock answering as in the customer's fluent-bit log; 8 workers
+unless noted, 150 orders/s for 75 s):
+
+| Run | Shipper and path | Events missing | Failure records |
+|---|---|---|---|
+| E1 | customer code, 16 workers, Splunk allows 8 connections | 1,122 of 34,527 (3.2%) | 0 (silent) |
+| E4 | customer code, 2% of calls get a 504 after 15 s | 1,165 of 34,532 (3.4%) | 0 (silent) |
+| E5 | batched shipper with failure records, same 504s | 773 events in 253 failed calls | 253 (each has the log document key, replayable) |
+| E6 | customer code through the relay, same 504s | 0 | 0 (relay absorbs and retries) |
+
+The customer's shipper does not check the HTTP status, so 503s and 504s count as success and the events disappear.
+
+**17. How far the new design goes (real Splunk, direct and through the relay).** 16 workers, shipper F, one log doc per execution, debug on.
+Profile 300 / 600 / 1,000 / 1,500 / 2,000 orders/s for 60 s each, 324,000 orders:
+
+| Run | Events expected | Events in Splunk | Failure records | Peak node CPU |
+|---|---|---|---|---|
+| P1 direct | 994,649 | 994,649 | 0 | 91% |
+| P2 via relay | 994,714 | 994,714 | 0 | 93% |
+
+About 6,100 events/s at the top stage, with the shared 4-vCPU nodes the limit. 33x the 183 events/s the customer measured.
+
+**18. Splunk outage, 5 minutes, at 300 then 600 orders/s (HEC switched off for 300 s):**
+
+| Run | Events expected | Events in Splunk | Failure records | Notes |
+|---|---|---|---|---|
+| O1 direct | 552,757 | 276,373 (50%) | 90,002 ("Could not connect to server") | losses are recorded and replayable |
+| O2 via relay | 552,694 | 552,694 | 0 | peak relay queue 299 batches; events created during the outage were searchable 79 s later on average, 333 s at most |
+
+The relay retries for up to 10 minutes by default (`max_elapsed_time` 600 s); a longer outage needs that and the queue size raised.
+
+**19. Soak, 30 minutes at 400 orders/s (about 1,230 events/s) through the relay:** 2,210,394 of 2,210,394 events in Splunk, 0 duplicates,
+0 failure records, created-to-searchable delay p95 0.6 s, max 0.9 s, peak node CPU 76%, relay queue peak 1 batch.
+
+**20. Counting method.** Events were counted in Splunk through the REST index count (before and after each run) and checked
+with searches for duplicates and per-level counts. The `received` column in the generated scenario reports is taken from a mock
+endpoint and shows 0 for runs sent straight to Splunk; use the Splunk figures above.
+
 ## Not tested / caveats
 
-- The customer's own Splunk and network path. Tests 11-14 used one local Splunk Enterprise trial at 100 orders/s; its indexing limits are not theirs.
+- The customer's own Splunk (location, latency, connection limit) and cluster size. The slow Splunk and the connection limit were imitated
+  with a mock; the real Splunk used in tests 17-19 was fast.
+- The Splunk test instance ran HEC over HTTP; HTTPS adds connection setup cost that these numbers exclude.
+- Soak was 30 minutes, outage 5 minutes, and the outage test ran at 300 to 600 orders/s, not at the 2,000 orders/s peak.
 - The customer's timer-based batching design.
-- A relay close to Eventing (same region). Round-trip savings are predicted, not measured.
+- The relay was one instance; two or more replicas are recommended for production.
 - A single small cluster; numbers compare designs and are not forecasts for another environment.
-- The relay's Collector config was validated and run locally, but option names should be re-checked for your version.
+- The relay's Collector config was validated against the version in `relay/docker-compose.yml`; re-check option names for a different version.
 
 ## Recommendations
 

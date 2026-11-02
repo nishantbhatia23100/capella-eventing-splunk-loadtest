@@ -100,6 +100,10 @@ def load_template(path, name, code_file, hec_url="", workers=0):
     body = json.loads(raw)
     if workers:
         body.setdefault("settings", {})["workerCount"] = workers
+    # http:// endpoints and self-signed HTTPS endpoints (a throwaway Splunk) need certificate validation off
+    for u in body.get("bindings", {}).get("urls", []):
+        if u.get("url", "").startswith("http://") or os.environ.get("NO_TLS_VERIFY") == "1":
+            u["validateTLSCertificate"] = False
     if "REPLACE_HEC_URL" in raw:
         print("WARNING: template still contains REPLACE_HEC_URL (pass --hec-url)")
     if name:
